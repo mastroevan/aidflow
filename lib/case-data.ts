@@ -1,14 +1,22 @@
 import { randomUUID } from "node:crypto";
 import {
   CaseStatus,
+  EligibilityStatus,
   Prisma,
   ReviewDecision,
   UserRole,
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
+  runEligibilityAnalysis,
+  runIntakeAnalysis,
+} from "@/lib/case-intelligence";
+import {
   type AidCase,
+  type AidCaseAnalysis,
+  type AidCaseEligibilityRecommendation,
   type AidCasePacket,
+  type DocumentItem,
   type EmploymentStatus,
   employmentStatusOptions,
   type LifeEvent,
@@ -134,6 +142,12 @@ function readBoolean(
   return typeof value === "boolean" ? value : fallback;
 }
 
+function readStringArray(value: Prisma.JsonValue | undefined) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 function coerceEnum<T extends readonly string[]>(
   value: Prisma.JsonValue | undefined,
   allowed: T,
@@ -195,6 +209,51 @@ function packetToJson(packet: AidCasePacket): Prisma.InputJsonValue {
   } satisfies Prisma.InputJsonObject;
 }
 
+function buildApplicationPacketJson(
+  packet: AidCasePacket,
+  existingPacketJson?: Prisma.JsonValue | null,
+  updates?: {
+    aidflowAnalysis?: AidCaseAnalysis | null;
+  }
+): Prisma.InputJsonValue {
+  const basePacket = packetToJson(packet);
+  const existingExtras =
+    isRecord(existingPacketJson)
+      ? Object.fromEntries(
+          Object.entries(existingPacketJson).filter(
+            ([key]) =>
+              ![
+                "applicantFullName",
+                "dateOfBirth",
+                "householdSize",
+                "address",
+                "city",
+                "state",
+                "zipCode",
+                "phone",
+                "email",
+                "preferredContactMethod",
+                "lifeEvent",
+                "monthlyIncome",
+                "employmentStatus",
+                "urgentNeeds",
+                "consentToSubmit",
+              ].includes(key)
+          )
+        )
+      : {};
+
+  return {
+    ...existingExtras,
+    ...(basePacket as Prisma.InputJsonObject),
+    ...(updates?.aidflowAnalysis
+      ? {
+          aidflowAnalysis: updates.aidflowAnalysis,
+        }
+      : {}),
+  } satisfies Prisma.InputJsonObject;
+}
+
 function buildPacketDefaults(aidCase: CaseDetailRecord): AidCasePacket {
   const lifeEvent = normalizeLifeEvent(aidCase.lifeEvent);
 
@@ -214,6 +273,29 @@ function buildPacketDefaults(aidCase: CaseDetailRecord): AidCasePacket {
     employmentStatus: defaultEmploymentByLifeEvent[lifeEvent],
     urgentNeeds: [...defaultUrgentNeedsByLifeEvent[lifeEvent]],
     consentToSubmit: true,
+  };
+}
+
+function parseAidCaseAnalysis(packetJson?: Prisma.JsonValue | null): AidCaseAnalysis | null {
+  if (!isRecord(packetJson) || !isRecord(packetJson.aidflowAnalysis)) {
+    return null;
+  }
+
+  const raw = packetJson.aidflowAnalysis;
+
+  return {
+    provider: "rules-engine",
+    generatedAt: readString(raw.generatedAt, new Date(0).toISOString()),
+    confidenceLabel:
+      readString(raw.confidenceLabel) === "High" ||
+      readString(raw.confidenceLabel) === "Medium"
+        ? (readString(raw.confidenceLabel) as AidCaseAnalysis["confidenceLabel"])
+        : "Review Needed",
+    householdSnapshot: readString(raw.householdSnapshot),
+    prioritySummary: readString(raw.prioritySummary),
+    extractedFacts: readStringArray(raw.extractedFacts),
+    blockers: readStringArray(raw.blockers),
+    nextSteps: readStringArray(raw.nextSteps),
   };
 }
 
@@ -282,6 +364,45 @@ export function buildCaseSummaryText(packet: AidCasePacket) {
   ].join(" ");
 }
 
+function mapEligibilityRecommendationStatus(
+  status: EligibilityStatus
+): AidCaseEligibilityRecommendation["status"] {
+  if (status === EligibilityStatus.LIKELY_ELIGIBLE) {
+    return "LIKELY_ELIGIBLE";
+  }
+
+  if (status === EligibilityStatus.MAYBE_ELIGIBLE) {
+    return "MAYBE_ELIGIBLE";
+  }
+
+  return "UNLIKELY";
+}
+
+function toEligibilityStatus(
+  status: AidCaseEligibilityRecommendation["status"]
+) {
+  if (status === "LIKELY_ELIGIBLE") {
+    return EligibilityStatus.LIKELY_ELIGIBLE;
+  }
+
+  if (status === "MAYBE_ELIGIBLE") {
+    return EligibilityStatus.MAYBE_ELIGIBLE;
+  }
+
+  return EligibilityStatus.UNLIKELY;
+}
+
+function mapDocumentsFromCaseRecord(aidCase: CaseDetailRecord): DocumentItem[] {
+  return aidCase.documents.map((document) => ({
+    id: document.id,
+    name: document.name,
+    type: document.type,
+    status: toDocumentStatus(document.status),
+    url: document.url ?? undefined,
+    evidenceNote: document.evidenceNote ?? undefined,
+  }));
+}
+
 export function mapCaseRecordToAidCase(aidCase: CaseDetailRecord): AidCase {
   const packet = normalizePacket(aidCase);
   const latestReview = aidCase.reviews[0];
@@ -303,13 +424,17 @@ export function mapCaseRecordToAidCase(aidCase: CaseDetailRecord): AidCase {
     monthlyIncome: packet.monthlyIncome,
     employmentStatus: packet.employmentStatus,
     urgentNeeds: packet.urgentNeeds,
-    documents: aidCase.documents.map((document) => ({
-      id: document.id,
-      name: document.name,
-      type: document.type,
-      status: toDocumentStatus(document.status),
-      url: document.url ?? undefined,
-      evidenceNote: document.evidenceNote ?? undefined,
+    documents: mapDocumentsFromCaseRecord(aidCase),
+    analysis: parseAidCaseAnalysis(aidCase.applicationPacket?.packetJson),
+    eligibility: aidCase.eligibilityItems.map((item) => ({
+      id: item.id,
+      programName: item.programName,
+      status: mapEligibilityRecommendationStatus(item.status),
+      reasoningSummary: item.reasoningSummary,
+      evidenceLinks: Array.isArray(item.evidenceLinksJson)
+        ? item.evidenceLinksJson.map((entry) => String(entry))
+        : [],
+      priorityOrder: item.priorityOrder,
     })),
     consentToSubmit: packet.consentToSubmit,
     reviewerApproved:
@@ -418,10 +543,16 @@ export async function saveAidCaseDraft(id: string, incomingCase: AidCase) {
       where: { caseId: id },
       create: {
         caseId: id,
-        packetJson: packetToJson(packet),
+        packetJson: buildApplicationPacketJson(
+          packet,
+          current.applicationPacket?.packetJson
+        ),
       },
       update: {
-        packetJson: packetToJson(packet),
+        packetJson: buildApplicationPacketJson(
+          packet,
+          current.applicationPacket?.packetJson
+        ),
         packetVersion: {
           increment: 1,
         },
@@ -434,6 +565,111 @@ export async function saveAidCaseDraft(id: string, incomingCase: AidCase) {
 
   if (!updated) {
     throw new CaseActionError("Saved case could not be reloaded.", 500);
+  }
+
+  return updated;
+}
+
+export async function runSavedCaseIntakeAnalysis(caseId: string) {
+  const current = await getCaseDetailById(caseId);
+
+  if (!current) {
+    throw new CaseActionError("Case not found.", 404);
+  }
+
+  if (current.submission) {
+    throw new CaseActionError("Submitted cases cannot be re-analyzed.", 409);
+  }
+
+  const packet = normalizePacket(current);
+  const documents = mapDocumentsFromCaseRecord(current);
+  const analysis = runIntakeAnalysis(packet, documents);
+
+  await db.applicationPacket.upsert({
+    where: { caseId },
+    create: {
+      caseId,
+      packetJson: buildApplicationPacketJson(packet, null, {
+        aidflowAnalysis: analysis,
+      }),
+    },
+    update: {
+      packetJson: buildApplicationPacketJson(
+        packet,
+        current.applicationPacket?.packetJson,
+        {
+          aidflowAnalysis: analysis,
+        }
+      ),
+      packetVersion: {
+        increment: 1,
+      },
+      generatedAt: new Date(),
+    },
+  });
+
+  const updated = await getApplicantCaseById(caseId);
+
+  if (!updated) {
+    throw new CaseActionError("Case could not be reloaded after intake analysis.", 500);
+  }
+
+  return updated;
+}
+
+function nextStatusAfterEligibilityRun(status: CaseStatus) {
+  if (
+    status === CaseStatus.DRAFT ||
+    status === CaseStatus.INTAKE_COMPLETE ||
+    status === CaseStatus.CHANGES_REQUESTED
+  ) {
+    return CaseStatus.UNDER_REVIEW;
+  }
+
+  return status;
+}
+
+export async function runSavedCaseEligibilityAnalysis(caseId: string) {
+  const current = await getCaseDetailById(caseId);
+
+  if (!current) {
+    throw new CaseActionError("Case not found.", 404);
+  }
+
+  if (current.submission) {
+    throw new CaseActionError("Submitted cases cannot be re-analyzed.", 409);
+  }
+
+  const packet = normalizePacket(current);
+  const documents = mapDocumentsFromCaseRecord(current);
+  const recommendations = runEligibilityAnalysis(packet, documents);
+
+  await db.$transaction([
+    db.eligibilityResult.deleteMany({
+      where: { caseId },
+    }),
+    db.eligibilityResult.createMany({
+      data: recommendations.map((recommendation) => ({
+        caseId,
+        programName: recommendation.programName,
+        status: toEligibilityStatus(recommendation.status),
+        reasoningSummary: recommendation.reasoningSummary,
+        evidenceLinksJson: recommendation.evidenceLinks,
+        priorityOrder: recommendation.priorityOrder,
+      })),
+    }),
+    db.case.update({
+      where: { id: caseId },
+      data: {
+        status: nextStatusAfterEligibilityRun(current.status),
+      },
+    }),
+  ]);
+
+  const updated = await getApplicantCaseById(caseId);
+
+  if (!updated) {
+    throw new CaseActionError("Case could not be reloaded after eligibility analysis.", 500);
   }
 
   return updated;

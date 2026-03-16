@@ -8,7 +8,7 @@ import {
   urgentNeedOptions,
 } from "@/lib/schema";
 import DocumentChecklist from "@/components/DocumentChecklist";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
@@ -19,7 +19,7 @@ type Props = {
 export default function SharedForm({ initialData, layout }: Props) {
   const [form, setForm] = useState<AidCase>(initialData);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
 
   function update<K extends keyof AidCase>(key: K, value: AidCase[K]) {
@@ -36,32 +36,62 @@ export default function SharedForm({ initialData, layout }: Props) {
 
   function goToReview() {
     setError(null);
+    setIsSaving(true);
 
-    startTransition(() => {
-      void (async () => {
-        try {
-          const response = await fetch(`/api/cases/${form.id}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(form),
-          });
+    void (async () => {
+      try {
+        const response = await fetch(`/api/cases/${form.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(form),
+        });
 
-          const result = await response.json();
+        const result = await response.json();
 
-          if (!response.ok) {
-            setError(result.error ?? "We could not save your draft.");
-            return;
-          }
-
-          router.push(`/review/${result.formData.id}?layout=${layout}`);
-        } catch (requestError) {
-          console.error("Save draft error:", requestError);
-          setError("We could not save your draft.");
+        if (!response.ok) {
+          setError(result.error ?? "We could not save your draft.");
+          return;
         }
-      })();
-    });
+
+        const intakeResponse = await fetch(
+          `/api/cases/${result.formData.id}/intake-analysis`,
+          {
+            method: "POST",
+          }
+        );
+        const intakeResult = await intakeResponse.json();
+
+        if (!intakeResponse.ok) {
+          setError(intakeResult.error ?? "We could not analyze the intake packet.");
+          return;
+        }
+
+        const eligibilityResponse = await fetch(
+          `/api/cases/${result.formData.id}/eligibility-analysis`,
+          {
+            method: "POST",
+          }
+        );
+        const eligibilityResult = await eligibilityResponse.json();
+
+        if (!eligibilityResponse.ok) {
+          setError(
+            eligibilityResult.error ??
+              "We could not generate eligibility recommendations."
+          );
+          return;
+        }
+
+        router.push(`/review/${eligibilityResult.formData.id}?layout=${layout}`);
+      } catch (requestError) {
+        console.error("Save draft error:", requestError);
+        setError("We could not save and analyze your draft.");
+      } finally {
+        setIsSaving(false);
+      }
+    })();
   }
 
   return (
@@ -271,10 +301,10 @@ export default function SharedForm({ initialData, layout }: Props) {
 
       <button
         onClick={goToReview}
-        disabled={isPending || !form.consentToSubmit}
+        disabled={isSaving || !form.consentToSubmit}
         className="rounded-2xl bg-black px-5 py-3 font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isPending ? "Saving packet..." : "Save and review application"}
+        {isSaving ? "Saving and analyzing..." : "Save, analyze, and review"}
       </button>
     </div>
   );

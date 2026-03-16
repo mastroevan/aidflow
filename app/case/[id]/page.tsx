@@ -1,5 +1,10 @@
 import { notFound } from "next/navigation";
-import { getCaseDetailById } from "@/lib/case-data";
+import EligibilityShortlist from "@/components/EligibilityShortlist";
+import IntakeAnalysisCard from "@/components/IntakeAnalysisCard";
+import {
+  getCaseDetailById,
+  mapCaseRecordToAidCase,
+} from "@/lib/case-data";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -12,14 +17,6 @@ type Document = {
   status: string;
   url?: string | null;
   evidenceNote?: string | null;
-};
-
-type EligibilityItem = {
-  id: string;
-  programName: string;
-  status: string;
-  reasoningSummary: string;
-  evidenceLinksJson?: unknown;
 };
 
 type Review = {
@@ -37,6 +34,8 @@ export default async function CaseDetailPage({ params }: PageProps) {
   if (!aidCase) {
     notFound();
   }
+
+  const mappedCase = mapCaseRecordToAidCase(aidCase);
 
   return (
     <main className="mx-auto max-w-6xl p-8 space-y-8">
@@ -93,35 +92,10 @@ export default async function CaseDetailPage({ params }: PageProps) {
           </div>
         </Card>
 
-        <Card title="Eligibility Shortlist">
-          <div className="space-y-3">
-            {aidCase.eligibilityItems.length === 0 ? (
-              <p className="text-sm text-gray-500">No eligibility results yet.</p>
-            ) : (
-              aidCase.eligibilityItems.map((item: EligibilityItem) => (
-                <div key={item.id} className="rounded-lg border p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold">{item.programName}</p>
-                    <EligibilityBadge status={item.status} />
-                  </div>
-                  <p className="text-sm text-gray-700">{item.reasoningSummary}</p>
-
-                  <div>
-                    <p className="text-sm font-medium">Evidence</p>
-                    <ul className="mt-1 list-disc pl-5 text-sm text-gray-600">
-                      {Array.isArray(item.evidenceLinksJson)
-                        ? item.evidenceLinksJson.map((evidence, index) => (
-                            <li key={index}>{String(evidence)}</li>
-                          ))
-                        : null}
-                    </ul>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+        <IntakeAnalysisCard analysis={mappedCase.analysis} />
       </section>
+
+      <EligibilityShortlist items={mappedCase.eligibility} />
 
       <section className="grid gap-6 md:grid-cols-2">
         <Card title="Application Packet">
@@ -209,14 +183,6 @@ function Card({
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className="rounded-full border px-3 py-1 text-sm font-medium">
-      {status.replaceAll("_", " ")}
-    </span>
-  );
-}
-
-function EligibilityBadge({ status }: { status: string }) {
-  return (
-    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold">
       {status.replaceAll("_", " ")}
     </span>
   );

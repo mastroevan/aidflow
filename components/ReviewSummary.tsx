@@ -1,4 +1,6 @@
 import DocumentChecklist from "@/components/DocumentChecklist";
+import EligibilityShortlist from "@/components/EligibilityShortlist";
+import IntakeAnalysisCard from "@/components/IntakeAnalysisCard";
 import { type AidCase } from "@/lib/schema";
 
 type Props = {
@@ -66,6 +68,8 @@ export default function ReviewSummary({ aidCase }: Props) {
         </div>
       </section>
 
+      <IntakeAnalysisCard analysis={aidCase.analysis} />
+      <EligibilityShortlist items={aidCase.eligibility} />
       <DocumentChecklist documents={aidCase.documents} title="Submission documents" />
     </div>
   );

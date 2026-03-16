@@ -57,10 +57,37 @@ export type AidCasePacket = {
   consentToSubmit: boolean;
 };
 
+export type EligibilityRecommendationStatus =
+  | "LIKELY_ELIGIBLE"
+  | "MAYBE_ELIGIBLE"
+  | "UNLIKELY";
+
+export type AidCaseEligibilityRecommendation = {
+  id: string;
+  programName: string;
+  status: EligibilityRecommendationStatus;
+  reasoningSummary: string;
+  evidenceLinks: string[];
+  priorityOrder: number;
+};
+
+export type AidCaseAnalysis = {
+  provider: "rules-engine";
+  generatedAt: string;
+  confidenceLabel: "High" | "Medium" | "Review Needed";
+  householdSnapshot: string;
+  prioritySummary: string;
+  extractedFacts: string[];
+  blockers: string[];
+  nextSteps: string[];
+};
+
 export type AidCase = AidCasePacket & {
   id: string;
   applicantUserId: string;
   documents: DocumentItem[];
+  analysis: AidCaseAnalysis | null;
+  eligibility: AidCaseEligibilityRecommendation[];
   reviewerApproved: boolean;
   status: string;
   summaryText: string;
