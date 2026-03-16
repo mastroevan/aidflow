@@ -1,5 +1,5 @@
 import SharedForm from "@/components/SharedForm";
-import { getCaseById } from "@/lib/utils";
+import { getApplicantCaseById, getDefaultApplicantCase } from "@/lib/case-data";
 
 export default async function LayoutCPage({
   searchParams,
@@ -7,8 +7,9 @@ export default async function LayoutCPage({
   searchParams: Promise<{ caseId?: string }>;
 }) {
   const params = await searchParams;
-  const caseId = params.caseId || "case-001";
-  const data = getCaseById(caseId);
+  const data = params.caseId
+    ? await getApplicantCaseById(params.caseId)
+    : await getDefaultApplicantCase();
 
   if (!data) {
     return <div className="p-8">Case not found.</div>;
@@ -17,6 +18,7 @@ export default async function LayoutCPage({
   return (
     <main className="mx-auto max-w-6xl p-8 grid gap-6 md:grid-cols-[1fr_320px]">
       <section className="rounded-2xl border bg-white p-6">
+        <p className="mb-2 text-sm uppercase tracking-[0.18em] text-gray-500">Layout C</p>
         <h1 className="mb-6 text-2xl font-bold">Case Intake Review</h1>
         <SharedForm initialData={data} layout="C" />
       </section>
@@ -26,6 +28,7 @@ export default async function LayoutCPage({
         <p><strong>Applicant:</strong> {data.applicantFullName}</p>
         <p><strong>Life event:</strong> {data.lifeEvent}</p>
         <p><strong>Urgent needs:</strong> {data.urgentNeeds.join(", ")}</p>
+        <p><strong>Status:</strong> {data.status.replaceAll("_", " ")}</p>
       </aside>
     </main>
   );

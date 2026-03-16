@@ -2,11 +2,18 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { CaseStatus } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReviewerDashboardPage() {
   const cases = await db.case.findMany({
     where: {
       status: {
-        in: [CaseStatus.UNDER_REVIEW, CaseStatus.APPROVED, CaseStatus.INTAKE_COMPLETE],
+        in: [
+          CaseStatus.UNDER_REVIEW,
+          CaseStatus.APPROVED,
+          CaseStatus.INTAKE_COMPLETE,
+          CaseStatus.SUBMITTED,
+        ],
       },
     },
     include: {

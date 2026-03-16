@@ -1,5 +1,5 @@
 import SharedForm from "@/components/SharedForm";
-import { getCaseById } from "@/lib/utils";
+import { getApplicantCaseById, getDefaultApplicantCase } from "@/lib/case-data";
 
 export default async function LayoutBPage({
   searchParams,
@@ -7,8 +7,9 @@ export default async function LayoutBPage({
   searchParams: Promise<{ caseId?: string }>;
 }) {
   const params = await searchParams;
-  const caseId = params.caseId || "case-001";
-  const data = getCaseById(caseId);
+  const data = params.caseId
+    ? await getApplicantCaseById(params.caseId)
+    : await getDefaultApplicantCase();
 
   if (!data) {
     return <div className="p-8">Case not found.</div>;
@@ -21,6 +22,7 @@ export default async function LayoutBPage({
         <div className="mb-6 h-2 rounded-full bg-gray-200">
           <div className="h-2 w-2/5 rounded-full bg-black"></div>
         </div>
+        <p className="mb-2 text-sm uppercase tracking-[0.18em] text-gray-500">Layout B</p>
         <h1 className="mb-6 text-2xl font-bold">Tell us about your situation</h1>
         <SharedForm initialData={data} layout="B" />
       </div>

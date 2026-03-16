@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getCaseDetailById } from "@/lib/case-data";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -9,8 +10,8 @@ type Document = {
   name: string;
   type: string;
   status: string;
-  url?: string;
-  evidenceNote?: string;
+  url?: string | null;
+  evidenceNote?: string | null;
 };
 
 type EligibilityItem = {
@@ -18,42 +19,24 @@ type EligibilityItem = {
   programName: string;
   status: string;
   reasoningSummary: string;
-  evidenceLinksJson?: string[];
+  evidenceLinksJson?: unknown;
 };
 
 type Review = {
   id: string;
   reviewer?: { name: string };
   decision: string;
-  notes?: string;
-  approvedAt?: string;
+  notes?: string | null;
+  approvedAt?: string | Date | null;
 };
-
-async function getCase(id: string) {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-  const res = await fetch(`${baseUrl}/api/cases/${id}`, {
-    cache: "no-store",
-  });
-
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw new Error("Failed to fetch case");
-  }
-
-  return res.json();
-}
 
 export default async function CaseDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const data = await getCase(id);
+  const aidCase = await getCaseDetailById(id);
 
-  if (!data?.case) {
+  if (!aidCase) {
     notFound();
   }
-
-  const aidCase = data.case;
 
   return (
     <main className="mx-auto max-w-6xl p-8 space-y-8">
@@ -126,10 +109,11 @@ export default async function CaseDetailPage({ params }: PageProps) {
                   <div>
                     <p className="text-sm font-medium">Evidence</p>
                     <ul className="mt-1 list-disc pl-5 text-sm text-gray-600">
-                      {Array.isArray(item.evidenceLinksJson) &&
-                        item.evidenceLinksJson.map((evidence: string, index: number) => (
-                          <li key={index}>{evidence}</li>
-                        ))}
+                      {Array.isArray(item.evidenceLinksJson)
+                        ? item.evidenceLinksJson.map((evidence, index) => (
+                            <li key={index}>{String(evidence)}</li>
+                          ))
+                        : null}
                     </ul>
                   </div>
                 </div>
