@@ -20,6 +20,11 @@ export default function IntakeAnalysisCard({ analysis }: Props) {
         {analysis ? (
           <div className="rounded-2xl bg-gray-100 px-4 py-3 text-sm text-gray-700">
             <p className="font-semibold text-gray-900">{analysis.confidenceLabel}</p>
+            <p className="mt-1">
+              {analysis.provider === "amazon-nova-lite"
+                ? "Amazon Nova Lite"
+                : "Rules engine fallback"}
+            </p>
             <p className="mt-1">{new Date(analysis.generatedAt).toLocaleString()}</p>
           </div>
         ) : null}

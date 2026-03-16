@@ -72,7 +72,7 @@ export type AidCaseEligibilityRecommendation = {
 };
 
 export type AidCaseAnalysis = {
-  provider: "rules-engine";
+  provider: "amazon-nova-lite" | "rules-engine";
   generatedAt: string;
   confidenceLabel: "High" | "Medium" | "Review Needed";
   householdSnapshot: string;

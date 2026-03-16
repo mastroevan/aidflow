@@ -55,36 +55,23 @@ export default function SharedForm({ initialData, layout }: Props) {
           return;
         }
 
-        const intakeResponse = await fetch(
+        const analysisResponse = await fetch(
           `/api/cases/${result.formData.id}/intake-analysis`,
           {
             method: "POST",
           }
         );
-        const intakeResult = await intakeResponse.json();
+        const analysisResult = await analysisResponse.json();
 
-        if (!intakeResponse.ok) {
-          setError(intakeResult.error ?? "We could not analyze the intake packet.");
-          return;
-        }
-
-        const eligibilityResponse = await fetch(
-          `/api/cases/${result.formData.id}/eligibility-analysis`,
-          {
-            method: "POST",
-          }
-        );
-        const eligibilityResult = await eligibilityResponse.json();
-
-        if (!eligibilityResponse.ok) {
+        if (!analysisResponse.ok) {
           setError(
-            eligibilityResult.error ??
-              "We could not generate eligibility recommendations."
+            analysisResult.error ??
+              "We could not generate the Bedrock analysis for this case."
           );
           return;
         }
 
-        router.push(`/review/${eligibilityResult.formData.id}?layout=${layout}`);
+        router.push(`/review/${analysisResult.formData.id}?layout=${layout}`);
       } catch (requestError) {
         console.error("Save draft error:", requestError);
         setError("We could not save and analyze your draft.");

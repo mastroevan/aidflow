@@ -1,4 +1,8 @@
 import {
+  BedrockRuntimeClient,
+  ConverseCommand,
+} from "@aws-sdk/client-bedrock-runtime";
+import {
   type AidCaseAnalysis,
   type AidCaseEligibilityRecommendation,
   type AidCasePacket,
@@ -16,6 +20,13 @@ type EligibilityScore = {
   missingRequiredDocs: string[];
   uploadedSupportingDocs: string[];
 };
+
+export type CombinedCaseAnalysis = {
+  analysis: AidCaseAnalysis;
+  eligibility: AidCaseEligibilityRecommendation[];
+};
+
+let bedrockClient: BedrockRuntimeClient | null = null;
 
 function titleCaseStatus(status: DocumentItem["status"]) {
   if (status === "needs_review") {
@@ -94,7 +105,10 @@ function scoreRule(
   score -= missingRequiredDocs.length;
   score += uploadedSupportingDocs.length;
 
-  if (missing.has(normalizeDocumentName("Photo ID")) && rule.requiredDocuments.includes("Photo ID")) {
+  if (
+    missing.has(normalizeDocumentName("Photo ID")) &&
+    rule.requiredDocuments.includes("Photo ID")
+  ) {
     score -= 1;
   }
 
@@ -107,7 +121,9 @@ function scoreRule(
   };
 }
 
-function statusFromScore(result: EligibilityScore): AidCaseEligibilityRecommendation["status"] {
+function statusFromScore(
+  result: EligibilityScore
+): AidCaseEligibilityRecommendation["status"] {
   if (result.score >= 8 && result.missingRequiredDocs.length === 0) {
     return "LIKELY_ELIGIBLE";
   }
@@ -172,7 +188,7 @@ function buildEvidenceLinks(
   return links;
 }
 
-export function runIntakeAnalysis(
+function buildFallbackIntakeAnalysis(
   packet: AidCasePacket,
   documents: DocumentItem[]
 ): AidCaseAnalysis {
@@ -217,7 +233,7 @@ export function runIntakeAnalysis(
   };
 }
 
-export function runEligibilityAnalysis(
+function buildFallbackEligibility(
   packet: AidCasePacket,
   documents: DocumentItem[]
 ): AidCaseEligibilityRecommendation[] {
@@ -229,7 +245,7 @@ export function runEligibilityAnalysis(
     (result) => statusFromScore(result) !== "UNLIKELY"
   );
 
-  const finalList = (shortlisted.length > 0 ? shortlisted : ranked.slice(0, 2))
+  return (shortlisted.length > 0 ? shortlisted : ranked.slice(0, 2))
     .slice(0, 3)
     .map((result, index) => {
       const status = statusFromScore(result);
@@ -243,6 +259,241 @@ export function runEligibilityAnalysis(
         priorityOrder: index + 1,
       };
     });
+}
 
-  return finalList;
+function buildFallbackCombinedAnalysis(
+  packet: AidCasePacket,
+  documents: DocumentItem[]
+): CombinedCaseAnalysis {
+  return {
+    analysis: buildFallbackIntakeAnalysis(packet, documents),
+    eligibility: buildFallbackEligibility(packet, documents),
+  };
+}
+
+function getBedrockClient() {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const region = process.env.AWS_REGION || "us-east-1";
+
+  if (!accessKeyId || !secretAccessKey) {
+    return null;
+  }
+
+  if (!bedrockClient) {
+    bedrockClient = new BedrockRuntimeClient({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+        ...(process.env.AWS_SESSION_TOKEN
+          ? { sessionToken: process.env.AWS_SESSION_TOKEN }
+          : {}),
+      },
+    });
+  }
+
+  return bedrockClient;
+}
+
+function cleanJsonResponse(rawText: string) {
+  const fenced = rawText.replace(/```json|```/gi, "").trim();
+  const firstBrace = fenced.indexOf("{");
+  const lastBrace = fenced.lastIndexOf("}");
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    throw new Error("Model response did not contain a JSON object.");
+  }
+
+  return fenced.slice(firstBrace, lastBrace + 1);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function normalizeNovaAnalysis(raw: unknown): AidCaseAnalysis {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Missing analysis payload.");
+  }
+
+  const analysis = raw as Record<string, unknown>;
+  const confidenceLabel =
+    analysis.confidenceLabel === "High" ||
+    analysis.confidenceLabel === "Medium" ||
+    analysis.confidenceLabel === "Review Needed"
+      ? analysis.confidenceLabel
+      : "Review Needed";
+
+  return {
+    provider: "amazon-nova-lite",
+    generatedAt: new Date().toISOString(),
+    confidenceLabel,
+    householdSnapshot: isString(analysis.householdSnapshot)
+      ? analysis.householdSnapshot
+      : "",
+    prioritySummary: isString(analysis.prioritySummary)
+      ? analysis.prioritySummary
+      : "",
+    extractedFacts: normalizeStringArray(analysis.extractedFacts),
+    blockers: normalizeStringArray(analysis.blockers),
+    nextSteps: normalizeStringArray(analysis.nextSteps),
+  };
+}
+
+function normalizeNovaEligibility(raw: unknown) {
+  if (!Array.isArray(raw)) {
+    throw new Error("Missing eligibility payload.");
+  }
+
+  const allowedPrograms = new Map(
+    benefitProgramRules.map((rule) => [rule.programName, rule.id] as const)
+  );
+
+  const normalized = raw
+    .map((item, index) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const recommendation = item as Record<string, unknown>;
+      const programName = isString(recommendation.programName)
+        ? recommendation.programName
+        : null;
+
+      if (!programName || !allowedPrograms.has(programName)) {
+        return null;
+      }
+
+      const status =
+        recommendation.status === "LIKELY_ELIGIBLE" ||
+        recommendation.status === "MAYBE_ELIGIBLE" ||
+        recommendation.status === "UNLIKELY"
+          ? recommendation.status
+          : "MAYBE_ELIGIBLE";
+
+      return {
+        id: allowedPrograms.get(programName)!,
+        programName,
+        status,
+        reasoningSummary: isString(recommendation.reasoningSummary)
+          ? recommendation.reasoningSummary
+          : "",
+        evidenceLinks: normalizeStringArray(recommendation.evidenceLinks),
+        priorityOrder:
+          typeof recommendation.priorityOrder === "number"
+            ? recommendation.priorityOrder
+            : index + 1,
+      } satisfies AidCaseEligibilityRecommendation;
+    })
+    .filter(
+      (item): item is AidCaseEligibilityRecommendation =>
+        item !== null
+    )
+    .sort((left, right) => left.priorityOrder - right.priorityOrder)
+    .slice(0, 3)
+    .map((item, index) => ({
+      ...item,
+      priorityOrder: index + 1,
+    }));
+
+  if (normalized.length === 0) {
+    throw new Error("Model did not return any allowed program matches.");
+  }
+
+  return normalized;
+}
+
+async function runBedrockCombinedAnalysis(
+  packet: AidCasePacket,
+  documents: DocumentItem[]
+): Promise<CombinedCaseAnalysis> {
+  const client = getBedrockClient();
+  const modelId = process.env.BEDROCK_MODEL_ID || "amazon.nova-lite-v1:0";
+
+  if (!client) {
+    throw new Error("AWS credentials are not configured for Bedrock.");
+  }
+
+  const systemPrompt = [
+    "You are AidFlow's intake and eligibility analyst running on Amazon Nova Lite.",
+    "Return only valid JSON with no markdown fences.",
+    "Use only the supplied benefit programs. Do not invent new programs.",
+    "Base your reasoning only on the provided intake packet, document statuses, and policy references.",
+    'Output schema: {"analysis":{"confidenceLabel":"High|Medium|Review Needed","householdSnapshot":"string","prioritySummary":"string","extractedFacts":["string"],"blockers":["string"],"nextSteps":["string"]},"eligibility":[{"programName":"string","status":"LIKELY_ELIGIBLE|MAYBE_ELIGIBLE|UNLIKELY","reasoningSummary":"string","evidenceLinks":["string"],"priorityOrder":1}]}',
+  ].join(" ");
+
+  const userPayload = {
+    packet,
+    documents,
+    benefitPrograms: benefitProgramRules.map((rule) => ({
+      programName: rule.programName,
+      summary: rule.summary,
+      lifeEvents: rule.lifeEvents,
+      urgentNeeds: rule.urgentNeeds,
+      maxMonthlyIncome: rule.maxMonthlyIncome,
+      requiredDocuments: rule.requiredDocuments,
+      supportingDocuments: rule.supportingDocuments,
+      nextStep: rule.nextStep,
+      policyReference: rule.policyReference,
+    })),
+  };
+
+  const command = new ConverseCommand({
+    modelId,
+    system: [
+      {
+        text: systemPrompt,
+      },
+    ],
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            text: JSON.stringify(userPayload, null, 2),
+          },
+        ],
+      },
+    ],
+    inferenceConfig: {
+      maxTokens: 1400,
+      temperature: 0.2,
+    },
+  });
+
+  const response = await client.send(command);
+  const rawText = response.output?.message?.content
+    ?.map((item) => ("text" in item ? item.text : ""))
+    .join("\n")
+    .trim();
+
+  if (!rawText) {
+    throw new Error("Bedrock returned an empty response.");
+  }
+
+  const parsed = JSON.parse(cleanJsonResponse(rawText)) as Record<string, unknown>;
+
+  return {
+    analysis: normalizeNovaAnalysis(parsed.analysis),
+    eligibility: normalizeNovaEligibility(parsed.eligibility),
+  };
+}
+
+export async function analyzeCase(
+  packet: AidCasePacket,
+  documents: DocumentItem[]
+): Promise<CombinedCaseAnalysis> {
+  try {
+    return await runBedrockCombinedAnalysis(packet, documents);
+  } catch (error) {
+    console.warn("Falling back to local AidFlow analysis:", error);
+    return buildFallbackCombinedAnalysis(packet, documents);
+  }
 }

@@ -7,10 +7,7 @@ import {
   UserRole,
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import {
-  runEligibilityAnalysis,
-  runIntakeAnalysis,
-} from "@/lib/case-intelligence";
+import { analyzeCase } from "@/lib/case-intelligence";
 import {
   type AidCase,
   type AidCaseAnalysis,
@@ -282,9 +279,13 @@ function parseAidCaseAnalysis(packetJson?: Prisma.JsonValue | null): AidCaseAnal
   }
 
   const raw = packetJson.aidflowAnalysis;
+  const provider =
+    readString(raw.provider) === "amazon-nova-lite"
+      ? "amazon-nova-lite"
+      : "rules-engine";
 
   return {
-    provider: "rules-engine",
+    provider,
     generatedAt: readString(raw.generatedAt, new Date(0).toISOString()),
     confidenceLabel:
       readString(raw.confidenceLabel) === "High" ||
@@ -570,53 +571,6 @@ export async function saveAidCaseDraft(id: string, incomingCase: AidCase) {
   return updated;
 }
 
-export async function runSavedCaseIntakeAnalysis(caseId: string) {
-  const current = await getCaseDetailById(caseId);
-
-  if (!current) {
-    throw new CaseActionError("Case not found.", 404);
-  }
-
-  if (current.submission) {
-    throw new CaseActionError("Submitted cases cannot be re-analyzed.", 409);
-  }
-
-  const packet = normalizePacket(current);
-  const documents = mapDocumentsFromCaseRecord(current);
-  const analysis = runIntakeAnalysis(packet, documents);
-
-  await db.applicationPacket.upsert({
-    where: { caseId },
-    create: {
-      caseId,
-      packetJson: buildApplicationPacketJson(packet, null, {
-        aidflowAnalysis: analysis,
-      }),
-    },
-    update: {
-      packetJson: buildApplicationPacketJson(
-        packet,
-        current.applicationPacket?.packetJson,
-        {
-          aidflowAnalysis: analysis,
-        }
-      ),
-      packetVersion: {
-        increment: 1,
-      },
-      generatedAt: new Date(),
-    },
-  });
-
-  const updated = await getApplicantCaseById(caseId);
-
-  if (!updated) {
-    throw new CaseActionError("Case could not be reloaded after intake analysis.", 500);
-  }
-
-  return updated;
-}
-
 function nextStatusAfterEligibilityRun(status: CaseStatus) {
   if (
     status === CaseStatus.DRAFT ||
@@ -629,7 +583,7 @@ function nextStatusAfterEligibilityRun(status: CaseStatus) {
   return status;
 }
 
-export async function runSavedCaseEligibilityAnalysis(caseId: string) {
+async function runSavedCaseAnalysis(caseId: string) {
   const current = await getCaseDetailById(caseId);
 
   if (!current) {
@@ -642,14 +596,36 @@ export async function runSavedCaseEligibilityAnalysis(caseId: string) {
 
   const packet = normalizePacket(current);
   const documents = mapDocumentsFromCaseRecord(current);
-  const recommendations = runEligibilityAnalysis(packet, documents);
+  const result = await analyzeCase(packet, documents);
 
   await db.$transaction([
+    db.applicationPacket.upsert({
+      where: { caseId },
+      create: {
+        caseId,
+        packetJson: buildApplicationPacketJson(packet, null, {
+          aidflowAnalysis: result.analysis,
+        }),
+      },
+      update: {
+        packetJson: buildApplicationPacketJson(
+          packet,
+          current.applicationPacket?.packetJson,
+          {
+            aidflowAnalysis: result.analysis,
+          }
+        ),
+        packetVersion: {
+          increment: 1,
+        },
+        generatedAt: new Date(),
+      },
+    }),
     db.eligibilityResult.deleteMany({
       where: { caseId },
     }),
     db.eligibilityResult.createMany({
-      data: recommendations.map((recommendation) => ({
+      data: result.eligibility.map((recommendation) => ({
         caseId,
         programName: recommendation.programName,
         status: toEligibilityStatus(recommendation.status),
@@ -673,6 +649,14 @@ export async function runSavedCaseEligibilityAnalysis(caseId: string) {
   }
 
   return updated;
+}
+
+export async function runSavedCaseIntakeAnalysis(caseId: string) {
+  return runSavedCaseAnalysis(caseId);
+}
+
+export async function runSavedCaseEligibilityAnalysis(caseId: string) {
+  return runSavedCaseAnalysis(caseId);
 }
 
 function createConfirmationId() {
