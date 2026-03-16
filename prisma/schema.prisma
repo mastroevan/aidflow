@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  APPLICANT
+  REVIEWER
+}
+
+enum CaseStatus {
+  DRAFT
+  INTAKE_COMPLETE
+  UNDER_REVIEW
+  APPROVED
+  CHANGES_REQUESTED
+  SUBMITTED
+}
+
+enum DocumentStatus {
+  UPLOADED
+  MISSING
+  NEEDS_REVIEW
+}
+
+enum EligibilityStatus {
+  LIKELY_ELIGIBLE
+  MAYBE_ELIGIBLE
+  UNLIKELY
+}
+
+enum ReviewDecision {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  name      String
+  role      UserRole
+  cases     Case[]
+  reviews   Review[]
+  createdAt DateTime  @default(now())
+}
+
+model Case {
+  id                String              @id @default(cuid())
+  applicantUserId   String
+  applicant         User                @relation(fields: [applicantUserId], references: [id])
+  status            CaseStatus          @default(DRAFT)
+  lifeEvent         String
+  summaryText       String
+  resumeToken       String              @unique @default(cuid())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  documents         Document[]
+  eligibilityItems  EligibilityResult[]
+  applicationPacket ApplicationPacket?
+  reviews           Review[]
+  submission        Submission?
+}
+
+model Document {
+  id           String         @id @default(cuid())
+  caseId       String
+  case         Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  name         String
+  type         String
+  status       DocumentStatus
+  url          String?
+  evidenceNote String?
+  createdAt    DateTime       @default(now())
+}
+
+model EligibilityResult {
+  id               String            @id @default(cuid())
+  caseId           String
+  case             Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  programName      String
+  status           EligibilityStatus
+  reasoningSummary String
+  evidenceLinksJson Json
+  priorityOrder    Int
+}
+
+model ApplicationPacket {
+  id            String   @id @default(cuid())
+  caseId        String   @unique
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  packetJson    Json
+  packetVersion Int      @default(1)
+  generatedAt   DateTime @default(now())
+}
+
+model Review {
+  id             String         @id @default(cuid())
+  caseId         String
+  case           Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  reviewerUserId String
+  reviewer       User           @relation(fields: [reviewerUserId], references: [id])
+  decision       ReviewDecision @default(PENDING)
+  notes          String?
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+}
+
+model Submission {
+  id             String   @id @default(cuid())
+  caseId         String   @unique
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  submittedBy    String
+  portalLayout   String
+  confirmationId String   @unique
+  submittedAt    DateTime @default(now())
+}
