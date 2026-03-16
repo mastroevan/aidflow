@@ -1,6 +1,7 @@
 import DocumentChecklist from "@/components/DocumentChecklist";
 import EligibilityShortlist from "@/components/EligibilityShortlist";
 import IntakeAnalysisCard from "@/components/IntakeAnalysisCard";
+import { sanitizeDisplayEmail, sanitizeDisplayName } from "@/lib/presentation";
 import { type AidCase } from "@/lib/schema";
 
 type Props = {
@@ -17,9 +18,11 @@ export default function ReviewSummary({ aidCase }: Props) {
               Applicant
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-gray-900">
-              {aidCase.applicantFullName}
+              {sanitizeDisplayName(aidCase.applicantFullName)}
             </h2>
-            <p className="mt-1 text-sm text-gray-600">{aidCase.email}</p>
+            <p className="mt-1 text-sm text-gray-600">
+              {sanitizeDisplayEmail(aidCase.email)}
+            </p>
           </div>
 
           <div className="rounded-2xl bg-gray-100 px-4 py-3 text-sm text-gray-700">

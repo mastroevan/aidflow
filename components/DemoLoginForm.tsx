@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { sanitizeDisplayName } from "@/lib/presentation";
 
 type DemoAccount = {
   email: string;
@@ -18,21 +19,13 @@ type Props = {
 
 export default function DemoLoginForm({ accounts }: Props) {
   const router = useRouter();
-  const [email, setEmail] = useState(accounts[0]?.email ?? "");
-  const [password, setPassword] = useState(accounts[0]?.password ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const passwordHint = accounts[0]?.password ?? "";
+  const [activeEmail, setActiveEmail] = useState<string | null>(null);
 
-  function pickAccount(account: DemoAccount) {
-    setEmail(account.email);
-    setPassword(account.password);
+  function continueAs(account: DemoAccount) {
     setError(null);
-  }
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
+    setActiveEmail(account.email);
 
     startTransition(() => {
       void (async () => {
@@ -43,8 +36,8 @@ export default function DemoLoginForm({ accounts }: Props) {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              email,
-              password,
+              email: account.email,
+              password: account.password,
             }),
           });
 
@@ -58,7 +51,7 @@ export default function DemoLoginForm({ accounts }: Props) {
           sessionStorage.setItem("aidflow-session", JSON.stringify(result.user));
           router.push(result.user.redirectPath);
         } catch (requestError) {
-          console.error("Demo login error:", requestError);
+          console.error("Portal access error:", requestError);
           setError("Unable to sign in right now.");
         }
       })();
@@ -69,71 +62,45 @@ export default function DemoLoginForm({ accounts }: Props) {
     <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
       <div>
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-gray-500">
-          Demo sign-in
+          Portal access
         </p>
         <h2 className="mt-2 text-2xl font-semibold text-gray-900">
-          Use seeded demo accounts
+          Continue with a prepared account
         </h2>
         <p className="mt-2 text-sm text-gray-600">
-          Sign in as an applicant to resume a case, or jump in as the reviewer.
+          Choose an applicant path or jump straight to the reviewer workspace.
         </p>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-6 space-y-3">
         {accounts.map((account) => (
           <button
             key={account.email}
             type="button"
-            onClick={() => pickAccount(account)}
-            className="rounded-full border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-black hover:text-black"
+            onClick={() => continueAs(account)}
+            disabled={isPending}
+            className="flex w-full items-center justify-between gap-4 rounded-3xl border border-gray-200 bg-gray-50 px-5 py-4 text-left transition hover:border-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {account.name} · {account.role}
+            <div>
+              <p className="text-base font-semibold text-gray-900">
+                {sanitizeDisplayName(account.name)}
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                {account.role === "Reviewer" ? "Open the reviewer queue" : "Resume an intake case"}
+              </p>
+            </div>
+            <span className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white">
+              {isPending && activeEmail === account.email ? "Opening..." : "Continue"}
+            </span>
           </button>
         ))}
       </div>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-gray-700">Email</span>
-          <input
-            className="w-full rounded-2xl border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="demo@example.com"
-          />
-        </label>
-
-        <label className="block space-y-2">
-          <span className="text-sm font-medium text-gray-700">Password</span>
-          <input
-            className="w-full rounded-2xl border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password123!"
-          />
-        </label>
-
-        {passwordHint ? (
-          <p className="text-sm text-gray-500">
-            Demo password hint: <span className="font-medium text-gray-800">{passwordHint}</span>
-          </p>
-        ) : null}
-
-        {error ? (
-          <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={isPending}
-          className="w-full rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isPending ? "Signing in..." : "Continue"}
-        </button>
-      </form>
+      {error ? (
+        <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

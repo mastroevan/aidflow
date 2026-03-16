@@ -97,9 +97,15 @@ export default function SharedForm({ initialData, layout }: Props) {
             </p>
           </div>
 
-          <div className="rounded-2xl bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
-            <p className="font-semibold text-gray-900">Packet version</p>
-            <p className="mt-1">v{form.packetVersion}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
+              <p className="font-semibold text-gray-900">Packet version</p>
+              <p className="mt-1">v{form.packetVersion}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm">
+              <p className="font-semibold text-emerald-950">Analysis engine</p>
+              <p className="mt-1">Amazon Nova Lite</p>
+            </div>
           </div>
         </div>
       </div>

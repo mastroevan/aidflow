@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSubmissionByConfirmationId } from "@/lib/case-data";
+import { sanitizeDisplayName } from "@/lib/presentation";
 
 export default async function ConfirmationPage({
   params,
@@ -22,7 +23,8 @@ export default async function ConfirmationPage({
         <p className="mt-2 text-2xl font-semibold">{submissionId}</p>
         <div className="mt-6 space-y-2 text-sm text-green-900">
           <p>
-            <strong>Applicant:</strong> {submission.case.applicant.name}
+            <strong>Applicant:</strong>{" "}
+            {sanitizeDisplayName(submission.case.applicant.name)}
           </p>
           <p>
             <strong>Portal layout:</strong> {submission.portalLayout}

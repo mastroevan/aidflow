@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AidFlow Demo Portal",
+  title: "AidFlow Portal",
   description:
-    "AidFlow hackathon demo for applicant intake, reviewer approval, and submission tracking.",
+    "AidFlow for applicant intake, reviewer approval, and submission tracking.",
 };
 
 export default function RootLayout({

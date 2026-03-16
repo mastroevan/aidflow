@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { sanitizeDisplayEmail, sanitizeDisplayName } from "@/lib/presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +18,10 @@ export default async function TestDbPage() {
         {users.map((user) => (
           <div key={user.id} className="rounded-xl border p-4">
             <p>
-              <strong>Name:</strong> {user.name}
+              <strong>Name:</strong> {sanitizeDisplayName(user.name)}
             </p>
             <p>
-              <strong>Email:</strong> {user.email}
+              <strong>Email:</strong> {sanitizeDisplayEmail(user.email)}
             </p>
             <p>
               <strong>Role:</strong> {user.role}

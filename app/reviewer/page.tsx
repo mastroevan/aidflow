@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { sanitizeDisplayEmail, sanitizeDisplayName } from "@/lib/presentation";
 import { CaseStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -84,8 +85,12 @@ export default async function ReviewerDashboardPage() {
                     <tr key={aidCase.id} className="border-t align-top">
                       <td className="px-6 py-4">
                         <div className="space-y-1">
-                          <p className="font-medium">{aidCase.applicant.name}</p>
-                          <p className="text-gray-500">{aidCase.applicant.email}</p>
+                          <p className="font-medium">
+                            {sanitizeDisplayName(aidCase.applicant.name)}
+                          </p>
+                          <p className="text-gray-500">
+                            {sanitizeDisplayEmail(aidCase.applicant.email)}
+                          </p>
                           <p className="text-xs text-gray-400 break-all">{aidCase.id}</p>
                         </div>
                       </td>
@@ -115,7 +120,9 @@ export default async function ReviewerDashboardPage() {
                           <div className="space-y-1">
                             <p className="font-medium">{latestReview.decision}</p>
                             <p className="text-gray-500">
-                              {latestReview.reviewer?.name ?? "Unknown reviewer"}
+                              {latestReview.reviewer
+                                ? sanitizeDisplayName(latestReview.reviewer.name)
+                                : "Unknown reviewer"}
                             </p>
                           </div>
                         ) : (

@@ -5,6 +5,11 @@ import {
   getCaseDetailById,
   mapCaseRecordToAidCase,
 } from "@/lib/case-data";
+import {
+  sanitizeDisplayEmail,
+  sanitizeDisplayName,
+  sanitizeDisplayText,
+} from "@/lib/presentation";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -36,6 +41,12 @@ export default async function CaseDetailPage({ params }: PageProps) {
   }
 
   const mappedCase = mapCaseRecordToAidCase(aidCase);
+  const packetJson =
+    aidCase.applicationPacket
+      ? sanitizeDisplayText(
+          JSON.stringify(aidCase.applicationPacket.packetJson, null, 2)
+        )
+      : null;
 
   return (
     <main className="mx-auto max-w-6xl p-8 space-y-8">
@@ -50,8 +61,8 @@ export default async function CaseDetailPage({ params }: PageProps) {
       <section className="grid gap-6 md:grid-cols-2">
         <Card title="Applicant">
           <div className="space-y-2">
-            <p><strong>Name:</strong> {aidCase.applicant.name}</p>
-            <p><strong>Email:</strong> {aidCase.applicant.email}</p>
+            <p><strong>Name:</strong> {sanitizeDisplayName(aidCase.applicant.name)}</p>
+            <p><strong>Email:</strong> {sanitizeDisplayEmail(aidCase.applicant.email)}</p>
             <p><strong>Role:</strong> {aidCase.applicant.role}</p>
             <p><strong>Life Event:</strong> {aidCase.lifeEvent}</p>
           </div>
@@ -112,7 +123,7 @@ export default async function CaseDetailPage({ params }: PageProps) {
               </p>
 
               <pre className="overflow-x-auto rounded-lg bg-gray-900 p-4 text-sm text-white">
-                {JSON.stringify(aidCase.applicationPacket.packetJson, null, 2)}
+                {packetJson}
               </pre>
             </div>
           )}
@@ -128,9 +139,18 @@ export default async function CaseDetailPage({ params }: PageProps) {
                 ) : (
                   aidCase.reviews.map((review: Review) => (
                     <div key={review.id} className="rounded-lg border p-3">
-                      <p><strong>Reviewer:</strong> {review.reviewer?.name ?? "Unknown"}</p>
+                      <p>
+                        <strong>Reviewer:</strong>{" "}
+                        {review.reviewer
+                          ? sanitizeDisplayName(review.reviewer.name)
+                          : "Unknown"}
+                      </p>
                       <p><strong>Decision:</strong> {review.decision}</p>
-                      {review.notes ? <p><strong>Notes:</strong> {review.notes}</p> : null}
+                      {review.notes ? (
+                        <p>
+                          <strong>Notes:</strong> {sanitizeDisplayText(review.notes)}
+                        </p>
+                      ) : null}
                       {review.approvedAt ? (
                         <p><strong>Approved At:</strong> {new Date(review.approvedAt).toLocaleString()}</p>
                       ) : null}
@@ -149,7 +169,10 @@ export default async function CaseDetailPage({ params }: PageProps) {
                   <div className="rounded-lg border p-3 space-y-1">
                     <p><strong>Confirmation ID:</strong> {aidCase.submission.confirmationId}</p>
                     <p><strong>Portal Layout:</strong> {aidCase.submission.portalLayout}</p>
-                    <p><strong>Submitted By:</strong> {aidCase.submission.submittedBy}</p>
+                    <p>
+                      <strong>Submitted By:</strong>{" "}
+                      {sanitizeDisplayText(aidCase.submission.submittedBy)}
+                    </p>
                     <p>
                       <strong>Submitted At:</strong>{" "}
                       {new Date(aidCase.submission.submittedAt).toLocaleString()}

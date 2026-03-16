@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       user.role === "REVIEWER"
         ? "/reviewer"
         : preferredCase
-          ? `/demo/layout-a?caseId=${preferredCase.id}`
+          ? `/portal/layout-a?caseId=${preferredCase.id}`
           : "/";
 
     return NextResponse.json({

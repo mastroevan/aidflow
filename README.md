@@ -1,6 +1,6 @@
 # AidFlow
 
-AidFlow is a Next.js hackathon demo for social-service intake. It lets you:
+AidFlow is a Next.js hackathon project for social-service intake. It lets you:
 
 - open one applicant case in three different portal layouts
 - save intake edits into a Prisma-backed case packet
@@ -38,15 +38,15 @@ npx prisma db seed
 npm run dev
 ```
 
-## Demo Flow
+## Portal Flow
 
-1. Open `/` to pick a seeded applicant case or sign in as a demo user.
-2. Open any of the three layout demos and update the packet.
+1. Open `/` to pick a seeded applicant case or sign in with a prepared account.
+2. Open any of the three portal layouts and update the packet.
 3. Use the review step to approve and submit the case.
 4. Open `/reviewer` or `/case/[id]` to confirm the saved submission state.
 
 ## Notes
 
-- The login flow is intentionally lightweight for demo use and is not production auth.
+- The login flow is intentionally lightweight and is not production auth.
 - `npx tsc --noEmit` is the fastest local validation path.
 - Production builds still depend on Prisma engine downloads being available in the environment.

@@ -20,7 +20,7 @@ async function main() {
 
   const maria = await prisma.user.create({
     data: {
-      email: "maria.demo@example.com",
+      email: "maria@example.com",
       password: "Password123!",
       name: "Maria Lopez",
       role: UserRole.APPLICANT,
@@ -29,7 +29,7 @@ async function main() {
 
   const kevin = await prisma.user.create({
     data: {
-      email: "kevin.demo@example.com",
+      email: "kevin@example.com",
       password: "Password123!",
       name: "Kevin Carter",
       role: UserRole.APPLICANT,
@@ -38,7 +38,7 @@ async function main() {
 
   const alina = await prisma.user.create({
     data: {
-      email: "alina.demo@example.com",
+      email: "alina@example.com",
       password: "Password123!",
       name: "Alina Brooks",
       role: UserRole.APPLICANT,
@@ -47,9 +47,9 @@ async function main() {
 
   const reviewer = await prisma.user.create({
     data: {
-      email: "reviewer.demo@example.com",
+      email: "reviewer@example.com",
       password: "Password123!",
-      name: "Case Worker Demo",
+      name: "Case Worker",
       role: UserRole.REVIEWER,
     },
   });
@@ -96,7 +96,7 @@ async function main() {
             state: "CA",
             zipCode: "92101",
             phone: "555-213-9088",
-            email: "maria.demo@example.com",
+            email: "maria@example.com",
             preferredContactMethod: "Phone",
             lifeEvent: "Job loss",
             monthlyIncome: 0,
@@ -150,7 +150,7 @@ async function main() {
             state: "CA",
             zipCode: "92103",
             phone: "555-884-1002",
-            email: "kevin.demo@example.com",
+            email: "kevin@example.com",
             preferredContactMethod: "Email",
             lifeEvent: "Sudden illness",
             monthlyIncome: 1200,
@@ -197,7 +197,7 @@ async function main() {
             state: "CA",
             zipCode: "92109",
             phone: "555-443-7812",
-            email: "alina.demo@example.com",
+            email: "alina@example.com",
             preferredContactMethod: "Text",
             lifeEvent: "Disaster displacement",
             monthlyIncome: 300,

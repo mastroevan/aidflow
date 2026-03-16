@@ -1,6 +1,7 @@
 import Link from "next/link";
 import DemoLoginForm from "@/components/DemoLoginForm";
 import { getDemoPortalOverview } from "@/lib/case-data";
+import { sanitizeDisplayEmail, sanitizeDisplayName } from "@/lib/presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,8 @@ export default async function HomePage() {
   try {
     portalData = await getDemoPortalOverview();
   } catch (error) {
-    console.error("Demo portal load error:", error);
-    loadError = "AidFlow could not connect to the demo database. The portal is configured, but live case data is unavailable right now.";
+    console.error("Portal load error:", error);
+    loadError = "AidFlow could not connect to the application database. The portal is configured, but live case data is unavailable right now.";
   }
 
   return (
@@ -24,12 +25,16 @@ export default async function HomePage() {
               AidFlow
             </p>
             <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-gray-950 md:text-5xl">
-              Demo portal for applicant intake, review, and submission.
+              Guided intake for applicant review and submission.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-gray-600">
-              Compare three intake layouts, resume seeded applicant cases, and verify that
+              Compare three intake layouts, resume applicant cases, and verify that
               reviewer actions and final submissions stay tied to the same Prisma-backed case.
             </p>
+            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              Amazon Nova Lite connected
+            </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
@@ -65,7 +70,7 @@ export default async function HomePage() {
                 Applicant cases
               </p>
               <h2 className="mt-2 text-2xl font-semibold text-gray-950">
-                Resume each seeded case in any layout
+                Resume each case in any layout
               </h2>
             </div>
             <p className="text-sm text-gray-500">
@@ -85,9 +90,11 @@ export default async function HomePage() {
                       {aidCase.status.replaceAll("_", " ")}
                     </p>
                     <h3 className="mt-2 text-xl font-semibold text-gray-900">
-                      {aidCase.applicantName}
+                      {sanitizeDisplayName(aidCase.applicantName)}
                     </h3>
-                    <p className="mt-1 text-sm text-gray-600">{aidCase.applicantEmail}</p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {sanitizeDisplayEmail(aidCase.applicantEmail)}
+                    </p>
                   </div>
                   {aidCase.confirmationId ? (
                     <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
@@ -112,19 +119,19 @@ export default async function HomePage() {
 
                 <div className="mt-6 grid grid-cols-3 gap-2">
                   <Link
-                    href={`/demo/layout-a?caseId=${aidCase.id}`}
+                    href={`/portal/layout-a?caseId=${aidCase.id}`}
                     className="rounded-2xl border border-gray-300 px-3 py-3 text-center text-sm font-medium text-gray-800 transition hover:border-black hover:text-black"
                   >
                     Layout A
                   </Link>
                   <Link
-                    href={`/demo/layout-b?caseId=${aidCase.id}`}
+                    href={`/portal/layout-b?caseId=${aidCase.id}`}
                     className="rounded-2xl border border-gray-300 px-3 py-3 text-center text-sm font-medium text-gray-800 transition hover:border-black hover:text-black"
                   >
                     Layout B
                   </Link>
                   <Link
-                    href={`/demo/layout-c?caseId=${aidCase.id}`}
+                    href={`/portal/layout-c?caseId=${aidCase.id}`}
                     className="rounded-2xl border border-gray-300 px-3 py-3 text-center text-sm font-medium text-gray-800 transition hover:border-black hover:text-black"
                   >
                     Layout C

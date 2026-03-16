@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { analyzeCase } from "@/lib/case-intelligence";
+import { sanitizeDisplayEmail, sanitizeDisplayName } from "@/lib/presentation";
 import {
   type AidCase,
   type AidCaseAnalysis,
@@ -255,7 +256,7 @@ function buildPacketDefaults(aidCase: CaseDetailRecord): AidCasePacket {
   const lifeEvent = normalizeLifeEvent(aidCase.lifeEvent);
 
   return {
-    applicantFullName: aidCase.applicant.name,
+    applicantFullName: sanitizeDisplayName(aidCase.applicant.name),
     dateOfBirth: "",
     householdSize: 1,
     address: "",
@@ -263,7 +264,7 @@ function buildPacketDefaults(aidCase: CaseDetailRecord): AidCasePacket {
     state: "",
     zipCode: "",
     phone: "",
-    email: aidCase.applicant.email,
+    email: sanitizeDisplayEmail(aidCase.applicant.email),
     preferredContactMethod: "Email",
     lifeEvent,
     monthlyIncome: 0,
@@ -317,7 +318,9 @@ function normalizePacket(aidCase: CaseDetailRecord): AidCasePacket {
   );
 
   return {
-    applicantFullName: readString(packet.applicantFullName, defaults.applicantFullName),
+    applicantFullName: sanitizeDisplayName(
+      readString(packet.applicantFullName, defaults.applicantFullName)
+    ),
     dateOfBirth: readString(packet.dateOfBirth, defaults.dateOfBirth),
     householdSize: readNumber(packet.householdSize, defaults.householdSize),
     address: readString(packet.address, defaults.address),
@@ -325,7 +328,7 @@ function normalizePacket(aidCase: CaseDetailRecord): AidCasePacket {
     state: readString(packet.state, defaults.state),
     zipCode: readString(packet.zipCode, defaults.zipCode),
     phone: readString(packet.phone, defaults.phone),
-    email: readString(packet.email, defaults.email),
+    email: sanitizeDisplayEmail(readString(packet.email, defaults.email)),
     preferredContactMethod: coerceEnum(
       packet.preferredContactMethod,
       preferredContactMethods,
@@ -716,7 +719,7 @@ export async function submitAidCase(input: {
           decision: ReviewDecision.APPROVED,
           notes:
             current.reviews[0].notes ??
-            `Approved for layout ${input.layout} demo submission.`,
+            `Approved for layout ${input.layout} portal submission.`,
           approvedAt,
         },
       });
@@ -726,7 +729,7 @@ export async function submitAidCase(input: {
           caseId: input.caseId,
           reviewerUserId: reviewerId,
           decision: ReviewDecision.APPROVED,
-          notes: `Approved for layout ${input.layout} demo submission.`,
+          notes: `Approved for layout ${input.layout} portal submission.`,
           approvedAt,
         },
       });
@@ -764,7 +767,7 @@ function buildAccountRedirectPath(user: DemoPortalUserRecord) {
     user.cases.find((aidCase) => aidCase.status !== CaseStatus.SUBMITTED) ??
     user.cases[0];
 
-  return preferredCase ? `/demo/layout-a?caseId=${preferredCase.id}` : "/";
+  return preferredCase ? `/portal/layout-a?caseId=${preferredCase.id}` : "/";
 }
 
 export async function getDemoPortalOverview(): Promise<DemoPortalOverview> {
