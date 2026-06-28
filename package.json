@@ -7,14 +7,15 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test:bedrock": "node --experimental-strip-types app/test-db/test.ts"
+    "test:bedrock": "tsx app/test-db/test.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1010.0",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@next/env": "^16.1.6",
     "@prisma/client": "^6.19.2",
     "dotenv": "^17.3.1",
     "next": "16.1.6",
+    "openai": "^6.45.0",
     "prisma": "^6.19.2",
     "react": "19.2.3",
     "react-dom": "19.2.3"
@@ -29,8 +30,5 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   }
 }

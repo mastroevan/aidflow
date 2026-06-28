@@ -23,7 +23,13 @@ AidFlow is a Next.js hackathon project for social-service intake. It lets you:
 npm install
 ```
 
-2. Ensure `.env` contains valid `DATABASE_URL` and `DIRECT_URL` values.
+2. Copy `.env.example` to `.env`, then set valid `DATABASE_URL` and `DIRECT_URL` values.
+
+```bash
+cp .env.example .env
+```
+
+Optional AWS Bedrock variables are included in the example for AI-backed intake and eligibility analysis. Set `AWS_BEARER_TOKEN_BEDROCK` to a short-term Bedrock API key, or leave it unset and let the app generate short-term tokens from your active AWS session credentials. If neither path is available, the app uses local fallback analysis.
 
 3. Run Prisma migrations and seed data:
 

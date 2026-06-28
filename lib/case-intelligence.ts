@@ -1,13 +1,10 @@
 import {
-  BedrockRuntimeClient,
-  ConverseCommand,
-} from "@aws-sdk/client-bedrock-runtime";
-import {
   type AidCaseAnalysis,
   type AidCaseEligibilityRecommendation,
   type AidCasePacket,
   type DocumentItem,
 } from "@/lib/schema";
+import { converseWithBedrock, getBedrockModelId } from "@/lib/bedrock-api";
 import {
   benefitProgramRules,
   type BenefitProgramRule,
@@ -25,8 +22,6 @@ export type CombinedCaseAnalysis = {
   analysis: AidCaseAnalysis;
   eligibility: AidCaseEligibilityRecommendation[];
 };
-
-let bedrockClient: BedrockRuntimeClient | null = null;
 
 function titleCaseStatus(status: DocumentItem["status"]) {
   if (status === "needs_review") {
@@ -271,31 +266,6 @@ function buildFallbackCombinedAnalysis(
   };
 }
 
-function getBedrockClient() {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  const region = process.env.AWS_REGION || "us-east-1";
-
-  if (!accessKeyId || !secretAccessKey) {
-    return null;
-  }
-
-  if (!bedrockClient) {
-    bedrockClient = new BedrockRuntimeClient({
-      region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-        ...(process.env.AWS_SESSION_TOKEN
-          ? { sessionToken: process.env.AWS_SESSION_TOKEN }
-          : {}),
-      },
-    });
-  }
-
-  return bedrockClient;
-}
-
 function cleanJsonResponse(rawText: string) {
   const fenced = rawText.replace(/```json|```/gi, "").trim();
   const firstBrace = fenced.indexOf("{");
@@ -414,12 +384,7 @@ async function runBedrockCombinedAnalysis(
   packet: AidCasePacket,
   documents: DocumentItem[]
 ): Promise<CombinedCaseAnalysis> {
-  const client = getBedrockClient();
-  const modelId = process.env.BEDROCK_MODEL_ID || "amazon.nova-lite-v1:0";
-
-  if (!client) {
-    throw new Error("AWS credentials are not configured for Bedrock.");
-  }
+  const modelId = getBedrockModelId();
 
   const systemPrompt = [
     "You are AidFlow's intake and eligibility analyst running on Amazon Nova Lite.",
@@ -445,30 +410,31 @@ async function runBedrockCombinedAnalysis(
     })),
   };
 
-  const command = new ConverseCommand({
-    modelId,
-    system: [
-      {
-        text: systemPrompt,
+  const response = await converseWithBedrock(
+    {
+      system: [
+        {
+          text: systemPrompt,
+        },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              text: JSON.stringify(userPayload, null, 2),
+            },
+          ],
+        },
+      ],
+      inferenceConfig: {
+        maxTokens: 1400,
+        temperature: 0.2,
       },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            text: JSON.stringify(userPayload, null, 2),
-          },
-        ],
-      },
-    ],
-    inferenceConfig: {
-      maxTokens: 1400,
-      temperature: 0.2,
     },
-  });
+    modelId
+  );
 
-  const response = await client.send(command);
   const rawText = response.output?.message?.content
     ?.map((item) => ("text" in item ? item.text : ""))
     .join("\n")
